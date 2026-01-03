@@ -1,36 +1,41 @@
-
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
-import { Skeleton } from '@/components/ui/skeleton';
-import dynamic from 'next/dynamic';
-import type { Device } from '@/lib/types';
-
-const LiveMap = dynamic(() => import('@/components/live-map'), {
-  ssr: false,
-  loading: () => <Skeleton className="h-full w-full" />,
-});
+import '@/lib/leaflet-fix';
+import 'leaflet/dist/leaflet.css';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import * as L from 'leaflet';
 
 type LeafletMapProps = {
-  devices?: Device[];
+  center: [number, number];
+  zoom?: number;
+  markers?: { position: [number, number]; popupText: string }[];
+  className?: string;
 };
 
-export default function LeafletMap({ devices = [] }: LeafletMapProps) {
-  const [isClient, setIsClient] = useState(false);
-
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-
+export default function LeafletMap({
+  center,
+  zoom = 13,
+  markers = [],
+  className,
+}: LeafletMapProps) {
   return (
-    <div style={{ height: '100%', width: '100%' }}>
-      {isClient ? (
-        <Suspense fallback={<Skeleton className="h-full w-full" />}>
-          <LiveMap devices={devices} />
-        </Suspense>
-      ) : (
-        <Skeleton className="h-full w-full" />
-      )}
-    </div>
+    <MapContainer
+      center={center}
+      zoom={zoom}
+      scrollWheelZoom
+      className={className}
+      style={{ height: '100%', width: '100%' }}
+    >
+      <TileLayer
+        attribution='&copy; OpenStreetMap contributors'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+
+      {markers.map((marker, idx) => (
+        <Marker key={idx} position={marker.position}>
+          <Popup>{marker.popupText}</Popup>
+        </Marker>
+      ))}
+    </MapContainer>
   );
 }
