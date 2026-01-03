@@ -1,0 +1,19 @@
+# Settings to manage and configure a Firebase App Hosting backend.
+# https://firebase.google.com/docs/app-hosting/configure
+
+runConfig:
+  # Increase this value if you'd like to automatically spin up
+  # more instances in response to increased traffic.
+  maxInstances: 1
+# Commands to build and run your app.
+# If you are using a framework with a standardized directory structure,
+# App Hosting attempts to detect your framework and generate these commands for you.
+# If you need to customize your build, you can uncomment and edit the lines
+# below. For more information, see
+# https://firebase.google.com/docs/app-hosting/configure-backend
+bundleConfig:
+   command: npm run build
+   # command: gcloud builds submit --tag GCR_HOSTNAME/IMAGE_NAME:latest .
+run:
+   command: npm run start
+   # command: gunicorn -w 4 -k uvicorn.workers.UvicornWorker main:app --bind 0.0.0.0:8080

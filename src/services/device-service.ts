@@ -1,97 +1,136 @@
+import {
+  collection,
+  addDoc,
+  getDocs,
+  getDoc,
+  doc,
+  updateDoc,
+  deleteDoc,
+} from 'firebase/firestore';
+import { getFirebaseSdks } from '@/firebase/firebase-app';
+import type { Device } from '@/lib/types';
 
-'use server';
+function getDb() {
+  return getFirebaseSdks().firestore;
+}
 
-import type { Device, DeviceStatus } from "@/lib/types";
+/* =========================
+   GET ALL DEVICES
+========================= */
+export async function getDevices(userId: string): Promise<Device[]> {
+  if (typeof userId !== 'string') {
+    throw new Error('getDevices: userId must be a string');
+  }
 
-const generateRandomCoordinates = (lat: number, lon: number, radius: number) => {
-  const y0 = lat;
-  const x0 = lon;
-  const rd = radius / 111300; // about 111300 meters in one degree
+  const firestore = getDb();
+  const devicesRef = collection(firestore, 'users', userId, 'devices');
+  const snapshot = await getDocs(devicesRef);
 
-  const u = Math.random();
-  const v = Math.random();
+  return snapshot.docs.map((d) => ({
+    id: d.id,
+    ...(d.data() as Omit<Device, 'id'>),
+  }));
+}
 
-  const w = rd * Math.sqrt(u);
-  const t = 2 * Math.PI * v;
-  const x = w * Math.cos(t);
-  const y = w * Math.sin(t);
+/* =========================
+   GET DEVICE BY ID
+========================= */
+export async function getDeviceById(
+  userId: string,
+  deviceId: string
+): Promise<Device | null> {
+  if (typeof userId !== 'string' || typeof deviceId !== 'string') {
+    throw new Error('getDeviceById: userId and deviceId must be strings');
+  }
+
+  const firestore = getDb();
+  const ref = doc(firestore, 'users', userId, 'devices', deviceId);
+  const snap = await getDoc(ref);
+
+  if (!snap.exists()) return null;
 
   return {
-    lat: y + y0,
-    lon: x + x0,
+    id: snap.id,
+    ...(snap.data() as Omit<Device, 'id'>),
   };
-};
+}
 
-const statuses: DeviceStatus[] = ["Active", "Stopped", "Offline"];
-const deviceNames = [
-  "Personal Car - Toyota",
-  "Delivery Van 1",
-  "Asset Tracker A2",
-  "Fleet Truck #502",
-  "Kids School Bus",
-  "John's Motorcycle",
-  "Warehouse Forklift",
-  "Shipping Container Z7",
-];
-const deviceTypes: Array<Device['type']> = ["Car", "Car", "Other", "Car", "Car", "Bike", "Other", "Other"];
+/* =========================
+   ADD DEVICE
+========================= */
+export async function addDevice(
+  deviceData: Pick<Device, 'name' | 'type' | 'userId'>
+): Promise<Device> {
+  if (typeof deviceData.userId !== 'string') {
+    throw new Error('addDevice: userId must be a string');
+  }
 
-// In-memory store for devices. In a real application, this would be a database.
-let devices: Device[] = Array.from({ length: 8 }, (_, i) => {
-    const status = statuses[i % statuses.length];
-    const { lat, lon } = generateRandomCoordinates(12.9716, 77.5946, 5000); // Centered around Bangalore
-    return {
-      id: `DEV00${i + 1}`,
-      name: deviceNames[i],
-      status,
-      battery: Math.floor(Math.random() * 81) + 20, // 20-100%
-      speed: status === "Active" ? Math.floor(Math.random() * 60) + 20 : 0, // 20-80 km/h if active
-      lastUpdated: new Date(Date.now() - Math.random() * 1000 * 60 * 60).toISOString(),
-      location: {
-        lat,
-        lon,
-      },
-      history: `Location A at 10:00, Location B at 10:30 (stopped for 5 mins), Location C at 11:00`,
-      type: deviceTypes[i],
-    };
+  const firestore = getDb();
+  const devicesRef = collection(
+    firestore,
+    'users',
+    deviceData.userId,
+    'devices'
+  );
+
+  const newDeviceData = {
+    ...deviceData,
+    status: 'Offline' as const,
+    lastUpdated: new Date().toISOString(),
+    location: { latitude: 0, longitude: 0 },
+    history: 'Device just added.',
+    speed: 0,
+    battery: 100,
+  };
+
+  const docRef = await addDoc(devicesRef, newDeviceData);
+  return { id: docRef.id, ...newDeviceData };
+}
+
+/* =========================
+   UPDATE DEVICE
+========================= */
+export async function updateDevice(
+  userId: string,
+  deviceId: string,
+  updates: Partial<Omit<Device, 'id'>>
+): Promise<Device | null> {
+  if (typeof userId !== 'string' || typeof deviceId !== 'string') {
+    throw new Error(
+      `updateDevice: invalid args (userId=${typeof userId}, deviceId=${typeof deviceId})`
+    );
+  }
+
+  const firestore = getDb();
+  const ref = doc(firestore, 'users', userId, 'devices', deviceId);
+
+  await updateDoc(ref, {
+    ...updates,
+    lastUpdated: new Date().toISOString(),
   });
 
-export async function getDevices(): Promise<Device[]> {
-  // In a real app, you'd fetch this from a database.
-  return Promise.resolve(devices);
-}
+  const updated = await getDoc(ref);
+  if (!updated.exists()) return null;
 
-export async function getDeviceById(id: string): Promise<Device | undefined> {
-  // In a real app, you'd query the database for a device with this ID.
-  return Promise.resolve(devices.find(d => d.id === id));
-}
-
-export async function addDevice(device: Omit<Device, 'id' | 'lastUpdated' | 'location' | 'history'>): Promise<Device> {
-  const newId = `DEV${String(devices.length + 1).padStart(3, '0')}`;
-  const { lat, lon } = generateRandomCoordinates(12.9716, 77.5946, 5000);
-  const newDevice: Device = {
-    ...device,
-    id: newId,
-    lastUpdated: new Date().toISOString(),
-    location: { lat, lon },
-    history: 'Device just added.',
-    type: 'Other'
+  return {
+    id: updated.id,
+    ...(updated.data() as Omit<Device, 'id'>),
   };
-  devices.push(newDevice);
-  return Promise.resolve(newDevice);
 }
 
-export async function updateDevice(id: string, updates: Partial<Device>): Promise<Device | null> {
-  const deviceIndex = devices.findIndex(d => d.id === id);
-  if (deviceIndex === -1) {
-    return null;
+/* =========================
+   DELETE DEVICE
+========================= */
+export async function deleteDevice(
+  userId: string,
+  deviceId: string
+): Promise<boolean> {
+  if (typeof userId !== 'string' || typeof deviceId !== 'string') {
+    throw new Error('deleteDevice: userId and deviceId must be strings');
   }
-  const updatedDevice = { ...devices[deviceIndex], ...updates };
-  devices[deviceIndex] = updatedDevice;
-  return Promise.resolve(updatedDevice);
-}
 
-export async function deleteDevice(id: string): Promise<boolean> {
-  const initialLength = devices.length;
-  devices = devices.filter(d => d.id !== id);
-  return Promise.resolve(devices.length < initialLength);
+  const firestore = getDb();
+  const ref = doc(firestore, 'users', userId, 'devices', deviceId);
+  await deleteDoc(ref);
+  return true;
 }

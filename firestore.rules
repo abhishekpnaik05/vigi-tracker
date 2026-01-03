@@ -1,0 +1,221 @@
+rules_version = '2';
+
+/**
+ * @file firestore.rules
+ * @description Security rules for the TrackVerse Firestore database.
+ *
+ * ## Core Philosophy
+ * This ruleset enforces a strict user-ownership model. All user-generated data,
+ * including devices, locations, and geofences, is stored within a dedicated
+ * subcollection under that user's own document. This ensures that users can only
+ * ever access or modify their own data, providing strong data isolation.
+ *
+ * ## Data Structure
+ * The data is organized hierarchically under the `/users/{userId}` path. This
+ * path-based security model is the foundation of the authorization logic.
+ * - /users/{userId}: Stores the user's public profile.
+ * - /users/{userId}/devices/{deviceId}: Stores devices owned by the user.
+ * - /users/{userId}/devices/{deviceId}/locations/{locationId}: Location history for a device.
+ * - /users/{userId}/geofences/{geofenceId}: Geofences created by the user.
+ * - /users/{userId}/notifications/{notificationId}: Notifications for the user.
+ *
+ * ## Key Security Decisions
+ * - User Isolation: A user's authentication UID MUST match the `{userId}` in the
+ *   document path for any access to be granted.
+ * - No User Enumeration: The top-level `/users` collection cannot be listed,
+ *   preventing malicious actors from discovering all users of the application.
+ * - Locked Down Ambiguous Collections: The `/device_geofences` collection is
+ *   currently locked down (all access denied) because the data model lacks a
+ *   `userId` field, making it impossible to securely determine ownership.
+ *
+ * ## Denormalization for Authorization
+ * To create simple and performant rules, user ownership is denormalized. For
+ * example, a `Device` document under `/users/{userId}/devices/{deviceId}` also
+ * contains a `userId` field internally. The rules enforce that this internal
+ * field must match the `{userId}` in the path upon creation and can never be
+ * changed, ensuring data integrity and fast, secure access without extra database reads.
+ *
+ * ## Structural Segregation
+ * Data is segregated into user-specific subcollections (e.g., `/devices`, `/geofences`).
+ * This approach ensures that all documents within a given collection path share the
+ * same security context (ownership by `{userId}`), which dramatically simplifies
+ * list queries and security rules.
+ */
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------------
+    // Helper Functions
+    // -------------------------------------------------------------------------
+
+    /**
+     * @description Checks if a user is authenticated.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * @description Checks if the currently authenticated user's UID matches the
+     * provided userId, establishing document ownership.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * @description Checks for ownership on an existing document. Used for safe
+     * update and delete operations.
+     */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+
+    /**
+     * @description On creation, validates that the new document's 'id' field
+     * matches the user's own UID.
+     */
+    function hasCorrectSelfId(userId) {
+      return request.resource.data.id == userId;
+    }
+
+    /**
+     * @description On update, ensures the document's 'id' field cannot be changed.
+     */
+    function isSelfIdImmutable() {
+      return request.resource.data.id == resource.data.id;
+    }
+
+    /**
+     * @description On creation, validates that the new document's 'userId' field
+     * correctly references the owner based on the path.
+     */
+    function hasCorrectOwner(userId) {
+      return request.resource.data.userId == userId;
+    }
+
+    /**
+     * @description On update, ensures the document's 'userId' field is immutable.
+     */
+    function isOwnerImmutable() {
+      return request.resource.data.userId == resource.data.userId;
+    }
+
+    // -------------------------------------------------------------------------
+    // User Profile Rules
+    // -------------------------------------------------------------------------
+
+    /**
+     * @description Manages user profile documents.
+     * @path /users/{userId}
+     * @allow (get) A user can read their own profile. auth.uid: "user_abc", path: /users/user_abc
+     * @deny (list) A user cannot list all other user profiles. auth.uid: "user_abc", path: /users
+     * @deny (update) A user cannot modify another user's profile. auth.uid: "user_abc", path: /users/user_xyz
+     * @principle Restricts access to a user's own data tree and prevents user enumeration.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId) && hasCorrectSelfId(userId);
+      allow update: if isExistingOwner(userId) && isSelfIdImmutable();
+      allow delete: if isExistingOwner(userId);
+
+      // -----------------------------------------------------------------------
+      // User Device Rules
+      // -----------------------------------------------------------------------
+
+      /**
+       * @description Manages GPS tracking devices owned by a user.
+       * @path /users/{userId}/devices/{deviceId}
+       * @allow (create) An authenticated user can add a new device for themselves. auth.uid: "user_abc", path: /users/user_abc/devices/device_123
+       * @deny (get) A user cannot read devices belonging to another user. auth.uid: "user_abc", path: /users/user_xyz/devices/device_456
+       * @principle Enforces strict ownership for all reads and writes. Validates relational integrity on create.
+       */
+      match /devices/{deviceId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && hasCorrectOwner(userId);
+        allow update: if isExistingOwner(userId) && isOwnerImmutable();
+        allow delete: if isExistingOwner(userId);
+
+        // ---------------------------------------------------------------------
+        // Device Location Rules
+        // ---------------------------------------------------------------------
+
+        /**
+         * @description Manages location history for a specific device.
+         * @path /users/{userId}/devices/{deviceId}/locations/{locationId}
+         * @allow (list) A user can list the location history for their own device. auth.uid: "user_abc", path: /users/user_abc/devices/device_123/locations
+         * @deny (create) A user cannot add location data to another user's device. auth.uid: "user_abc", path: /users/user_xyz/devices/device_456/locations/loc_789
+         * @principle Access is inherited from the parent user document based on the path.
+         */
+        match /locations/{locationId} {
+          allow get: if isOwner(userId);
+          allow list: if isOwner(userId);
+          allow create: if isOwner(userId);
+          allow update: if isExistingOwner(userId);
+          allow delete: if isExistingOwner(userId);
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // User Geofence Rules
+      // -----------------------------------------------------------------------
+
+      /**
+       * @description Manages geofences created by a user.
+       * @path /users/{userId}/geofences/{geofenceId}
+       * @allow (create) An authenticated user can create a geofence for their account. auth.uid: "user_abc", path: /users/user_abc/geofences/geo_123
+       * @deny (delete) A user cannot delete a geofence owned by another user. auth.uid: "user_abc", path: /users/user_xyz/geofences/geo_456
+       * @principle Enforces strict ownership for all reads and writes. Validates relational integrity on create.
+       */
+      match /geofences/{geofenceId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && hasCorrectOwner(userId);
+        allow update: if isExistingOwner(userId) && isOwnerImmutable();
+        allow delete: if isExistingOwner(userId);
+      }
+
+      // -----------------------------------------------------------------------
+      // User Notification Rules
+      // -----------------------------------------------------------------------
+
+      /**
+       * @description Manages notifications sent to a user.
+       * @path /users/{userId}/notifications/{notificationId}
+       * @allow (update) A user can mark their own notifications as read. auth.uid: "user_abc", path: /users/user_abc/notifications/notif_123
+       * @deny (list) A user cannot list notifications for another user. auth.uid: "user_abc", path: /users/user_xyz/notifications
+       * @principle Enforces strict ownership for all reads and writes. Validates relational integrity on create.
+       */
+      match /notifications/{notificationId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && hasCorrectOwner(userId);
+        allow update: if isExistingOwner(userId) && isOwnerImmutable();
+        allow delete: if isExistingOwner(userId);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Device-Geofence Association Rules
+    // -------------------------------------------------------------------------
+
+    /**
+     * @description Manages the many-to-many relationship between devices and geofences.
+     * @path /device_geofences/{deviceGeofenceId}
+     * @allow (none) All access is currently denied due to a security limitation in the data model.
+     * @deny (create) Any attempt to create a link will be rejected.
+     * @principle Default to deny. Proper authorization requires knowing the owner of the resources being linked.
+     */
+    match /device_geofences/{deviceGeofenceId} {
+      // CRITICAL: Cannot implement secure rules for this collection. The 'DeviceGeofence'
+      // entity is missing a 'userId' field to establish ownership. Without it, there is no
+      // way to verify if the user creating this link is the actual owner of the
+      // corresponding Device and Geofence.
+      allow get: if false;
+      allow list: if false;
+      allow create, update, delete: if false; // TODO: Add a 'userId' field to the DeviceGeofence document and implement owner-based validation.
+    }
+  }
+}

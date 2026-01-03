@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -18,18 +17,20 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { CreditCard, LogOut, Settings, User } from "lucide-react";
 import Link from "next/link";
-import { useAuth } from "@/hooks/use-auth";
+import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
+import { getAuth, signOut } from "firebase/auth";
 
 export function UserNav() {
-  const { user, logout } = useAuth();
+  const { user } = useUser();
   const router = useRouter();
   
   if (!user) {
     return null;
   }
 
-  const getInitials = (name: string) => {
+  const getInitials = (name: string | null) => {
+    if (!name) return 'U';
     const names = name.split(' ');
     if (names.length > 1) {
       return `${names[0][0]}${names[names.length - 1][0]}`;
@@ -37,8 +38,9 @@ export function UserNav() {
     return name.substring(0, 2).toUpperCase();
   }
   
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    const auth = getAuth();
+    await signOut(auth);
     router.push('/auth/login');
   }
 
@@ -47,15 +49,15 @@ export function UserNav() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-8 w-8 rounded-full">
           <Avatar className="h-9 w-9">
-            <AvatarImage src={`https://picsum.photos/seed/${user.email}/40/40`} alt="User avatar" data-ai-hint="user avatar" />
-            <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
+            <AvatarImage src={user.photoURL ?? `https://picsum.photos/seed/${user.email}/40/40`} alt="User avatar" data-ai-hint="user avatar" />
+            <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56" align="end" forceMount>
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">{user.name}</p>
+            <p className="text-sm font-medium leading-none">{user.displayName}</p>
             <p className="text-xs leading-none text-muted-foreground">
               {user.email}
             </p>

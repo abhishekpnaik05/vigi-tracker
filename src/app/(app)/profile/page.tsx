@@ -1,4 +1,3 @@
-
 'use client';
 
 import PageHeader from "@/components/page-header";
@@ -7,16 +6,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/hooks/use-auth";
+import { useUser } from '@/firebase/auth/use-user';
 
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { user } = useUser();
 
   if (!user) {
     return null;
   }
-
-  const getInitials = (name: string) => {
+  
+  const getInitials = (name: string | null) => {
+    if (!name) return 'U';
     const names = name.split(' ');
     if (names.length > 1) {
       return `${names[0][0]}${names[names.length - 1][0]}`;
@@ -36,8 +36,8 @@ export default function ProfilePage() {
         <CardContent className="space-y-6">
             <div className="flex items-center gap-4">
                 <Avatar className="h-20 w-20">
-                    <AvatarImage src={`https://picsum.photos/seed/${user.email}/80/80`} data-ai-hint="user avatar" />
-                    <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
+                    <AvatarImage src={user.photoURL ?? `https://picsum.photos/seed/${user.email}/80/80`} data-ai-hint="user avatar" />
+                    <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
                 </Avatar>
                 <div className="flex gap-2">
                     <Button>Change</Button>
@@ -47,11 +47,11 @@ export default function ProfilePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                     <Label htmlFor="name">Full Name</Label>
-                    <Input id="name" defaultValue={user.name} />
+                    <Input id="name" defaultValue={user.displayName ?? ''} />
                 </div>
                 <div className="space-y-2">
                     <Label htmlFor="email">Email Address</Label>
-                    <Input id="email" type="email" defaultValue={user.email} disabled />
+                    <Input id="email" type="email" defaultValue={user.email ?? ''} disabled />
                 </div>
             </div>
         </CardContent>

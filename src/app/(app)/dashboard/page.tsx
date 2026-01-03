@@ -1,9 +1,7 @@
-
 'use client';
 
 import Link from "next/link";
 import {
-  Map,
   PlusCircle,
   Bell,
   CheckCircle2,
@@ -30,9 +28,8 @@ import {
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
 import { getDevices } from "@/services/device-service";
-import type { Device } from "@/lib/types";
 import { triggerSOSAlert } from "@/ai/flows/trigger-sos-alert";
-import { useUser } from "@/firebase/auth/use-user";
+import { useUser } from '@/firebase/auth/use-user';
 
 
 export default function DashboardPage() {
@@ -45,7 +42,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function fetchDevices() {
-      if (!user) return;
+        if (!user) return;
         try {
             const devices = await getDevices(user.uid);
             setDeviceCount(devices.length);
@@ -57,38 +54,35 @@ export default function DashboardPage() {
         }
     }
     fetchDevices();
-  }, []);
+  }, [user]);
 
   const handleSos = () => {
     setIsSosLoading(true);
     navigator.geolocation.getCurrentPosition(
         async (position) => {
-  try {
-    if (!user || !user.email) {
-      throw new Error("User not authenticated");
-    }
-
-    const result = await triggerSOSAlert({
-      userName: user.displayName ?? "Unknown User",
-      userEmail: user.email, // now guaranteed to be string
-      location: {
-        lat: position.coords.latitude,
-        lon: position.coords.longitude,
-      },
-    });
-
-    toast.error("SOS Activated", {
-      description: result.confirmationMessage,
-    });
-  } catch (error) {
-    toast.error("SOS Failed", {
-      description: "Could not send the SOS alert. Please try again.",
-    });
-  } finally {
-    setIsSosLoading(false);
-  }
-},
-
+            try {
+                if (!user || !user.displayName || !user.email) {
+                    throw new Error("User not authenticated");
+                }
+                const result = await triggerSOSAlert({
+                    userName: user.displayName,
+                    userEmail: user.email,
+                    location: {
+                        lat: position.coords.latitude,
+                        lon: position.coords.longitude,
+                    },
+                });
+                toast.error("SOS Activated", {
+                    description: result.confirmationMessage,
+                });
+            } catch (error) {
+                toast.error("SOS Failed", {
+                    description: "Could not send the SOS alert. Please try again.",
+                });
+            } finally {
+                setIsSosLoading(false);
+            }
+        },
         (error) => {
             console.error("Error getting location:", error);
             toast.error("Location Error", {
@@ -103,10 +97,10 @@ export default function DashboardPage() {
     <div className="flex flex-col gap-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">
-          Track What Matters, Anytime, Anywhere.
+          Welcome back, {user?.displayName?.split(' ')[0]}!
         </h1>
         <p className="text-muted-foreground mt-2">
-          Welcome back, here's a quick overview of your devices.
+          Here's a quick overview of your devices.
         </p>
       </div>
       
@@ -135,7 +129,7 @@ export default function DashboardPage() {
       </AlertDialog>
 
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         <Button
           asChild
           size="lg"
@@ -143,15 +137,6 @@ export default function DashboardPage() {
         >
           <Link href="/devices/new">
             <PlusCircle className="mr-3 h-6 w-6" /> Add Device
-          </Link>
-        </Button>
-        <Button
-          asChild
-          size="lg"
-          className="h-20 text-lg bg-accent hover:bg-accent/90 rounded-2xl shadow-sm hover:shadow-md transition-shadow"
-        >
-          <Link href="/map">
-            <Map className="mr-3 h-6 w-6" /> Live Map
           </Link>
         </Button>
         <Button

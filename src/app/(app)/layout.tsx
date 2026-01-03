@@ -1,9 +1,8 @@
-
 'use client';
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/use-auth';
+import { useUser } from '@/firebase/auth/use-user';
 import AppHeader from "@/components/layout/app-header";
 import AppSidebar from "@/components/layout/app-sidebar";
 import { Sidebar, SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
@@ -14,20 +13,21 @@ export default function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isLoading } = useUser();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    if (!isLoading && !user) {
       router.push('/auth/login');
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [user, isLoading, router]);
 
-  if (isLoading || !isAuthenticated) {
+  if (isLoading || !user) {
     return (
       <div className="flex min-h-screen w-full">
-        <div className="hidden md:flex flex-col gap-4 p-4">
+        <div className="hidden md:flex flex-col gap-4 p-4 border-r bg-card">
             <Skeleton className="h-12 w-[14rem]" />
+            <Skeleton className="h-8 w-[14rem] mt-4" />
             <Skeleton className="h-8 w-[14rem]" />
             <Skeleton className="h-8 w-[14rem]" />
             <Skeleton className="h-8 w-[14rem]" />

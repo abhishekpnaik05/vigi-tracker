@@ -9,11 +9,12 @@ export type Device = {
   speed: number;
   lastUpdated: string;
   location: {
-    lat: number;
-    lon: number;
+    latitude: number;
+    longitude: number;
   };
   history: string;
-  type?: "Car" | "Bike" | "Person" | "Other";
+  type: "Car" | "Bike" | "Person" | "Other";
+  userId: string;
 };
 
 export type NotificationType = "info" | "warning" | "success";

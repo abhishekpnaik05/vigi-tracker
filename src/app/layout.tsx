@@ -1,10 +1,7 @@
-
 import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/sonner";
-import { AuthProvider } from '@/hooks/use-auth';
-import 'leaflet/dist/leaflet.css';
-
+import { AuthProvider } from '@/firebase/auth/use-user';
 
 export const metadata: Metadata = {
   title: 'TrackVerse',

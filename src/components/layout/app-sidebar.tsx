@@ -1,5 +1,4 @@
-
-"use client";
+'use client';
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -15,17 +14,18 @@ import { NAV_LINKS } from "@/lib/constants";
 import { Logo } from "@/components/icons";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useAuth } from "@/hooks/use-auth";
+import { useUser } from "@/firebase/auth/use-user";
 
 export default function AppSidebar() {
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { user } = useUser();
   
   if (!user) {
     return null;
   }
 
-  const getInitials = (name: string) => {
+  const getInitials = (name: string | null) => {
+    if (!name) return 'U';
     const names = name.split(' ');
     if (names.length > 1) {
       return `${names[0][0]}${names[names.length - 1][0]}`;
@@ -36,9 +36,9 @@ export default function AppSidebar() {
   return (
     <>
       <SidebarHeader>
-        <Link href="/" className="flex items-center gap-2">
+        <Link href="/dashboard" className="flex items-center gap-2">
           <Logo className="h-7 w-7 text-primary" />
-          <span className="text-xl font-semibold tracking-tight">Vigi Track</span>
+          <span className="text-xl font-semibold tracking-tight">TrackVerse</span>
         </Link>
       </SidebarHeader>
 
@@ -66,14 +66,14 @@ export default function AppSidebar() {
         <div className="flex w-full items-center justify-start gap-3 p-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:py-2">
           <Avatar className="h-9 w-9">
             <AvatarImage
-              src={`https://picsum.photos/seed/${user.email}/40/40`}
+              src={user.photoURL ?? `https://picsum.photos/seed/${user.email}/40/40`}
               alt="User avatar"
               data-ai-hint="user avatar"
             />
-            <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
+            <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
           </Avatar>
           <div className="flex flex-col group-data-[collapsible=icon]:hidden">
-            <p className="text-sm font-medium leading-none">{user.name}</p>
+            <p className="text-sm font-medium leading-none">{user.displayName}</p>
             <p className="text-xs leading-none text-muted-foreground">
               {user.email}
             </p>
